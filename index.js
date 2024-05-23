@@ -20,6 +20,7 @@ async function changeFormat(obj)
         variants: newArray
     };
 }
+
 async function checkValidation(obj)
 {
     const Ajv = require('ajv')
@@ -70,8 +71,16 @@ async function checkValidation(obj)
     const validate = ajv.compile(schema);
     return validate(obj);
 }
+
+/**
+ *
+ * @param {Object} req {topic: String, count: String }
+ * @returns {Promise<{variants: []}>}
+ */
 async function generateTest(req)
 {
+    const jsonlint = require('jsonlint');
+
     const catalog = "b1g46tb0m05aust2pkfn";
     const key = "AQVN38fPgG2lasB3jDuglpi2TxGujJUgX6275rZY";
 
@@ -81,7 +90,14 @@ async function generateTest(req)
         "Authorization": `Api-Key ${key}`
     }
 
-    const prompt = `Выведи json файл по запросу тест по теме ${req["topic"]} количество вопросов ${req["question_number"]} по ${req["answers_number"]} варианта ответа в формате: массив вопросов называется variants, каждый вопрос объект с id имассивом tasks, который включает объект с id, типом type (из: text - открытый вопрос, radio - вопрос с одним правильным ответом, checkbox - множественный выбор), названием вопроса content и массивом с вариантами ответа answers, каждый ответ это объект с id ответа, текстом ответа content, ключом correct, который принимает значение true, если ответ правильный, иначе false`
+    const prompt = `Выведи json файл по запросу тест по теме ${req["topic"]} 
+    количество вопросов ${req["count"]} в формате: массив вопросов 
+    называется variants, каждый вопрос объект с id имассивом tasks, который включает 
+    объект с строкой id, типом type (text - только один вариант ответа и он правильный, 
+        radio - один правильный вариант ответа, checkbox - несколько правильных вариантов ответа), 
+        названием вопроса content и массивом с вариантами ответа answers, каждый ответ это объект
+         с id ответа, текстом ответа content, ключом correct, который принимает значение true, 
+         если ответ правильный, иначе false`
 
     const maxTokens = "100000"; //TODO: формула подсчета
     const payload = {
@@ -98,28 +114,68 @@ async function generateTest(req)
             }
         ]
     };
+
     let res = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
     });
     res = await res.json();
+
     const message = res["result"]["alternatives"]["0"]["message"]["text"]
-    const regex = /```json\n([\s\S]*?)```/;
-    const match = message.match(regex);
-    const obj = JSON.parse(match[1]);
-    return await changeFormat(obj)
+    const match = message.match(/```json\n([\s\S]*?)```/);
+
+    try
+    {
+        let obj = jsonlint.parse(match[1]);
+        let variants = await changeFormat(obj);
+
+        if (await checkValidation(variants))
+        {
+            return variants;
+        }
+        else
+        {
+            console.error("Ошибка при валидации JSON:");
+            return variants;
+        }
+    }
+    catch (error)
+    {
+        console.error("Ошибка при парсинге JSON:", error);
+        return null;
+    }
 }
 
-const input_data = {
-    "topic":"История России 20 века",
-    "question_number":"1",
-    "answers_number":"4",
-    "grade":"5 класс",
-    "complexity":"очень сложный",
-    "description":"тест по математике"
-};
-const res = generateTest(input_data);
-res.then(r => {
-    console.log(JSON.stringify(r));
-});
+/**
+ *
+ * @param {Object} req {topic: String}
+ * @returns {Promise<{variants: []}>}
+ */
+async function regenerateTest(req)
+{
+    req["count"] = "1";
+    return await generateTest(req)
+}
+
+const INPUT_JSON = {
+    "topic": "История России 20 века",
+    "count": "3",
+}
+function test_gen(req)
+{
+    const gen_res = generateTest(req);
+    gen_res.then(r => {
+        console.log(JSON.stringify(r));
+    });
+}
+function test_regen(req)
+{
+    const regen_res = regenerateTest(req);
+    regen_res.then(r => {
+        console.log(JSON.stringify(r));
+    });
+}
+
+//test_regen(INPUT_JSON);
+test_gen(INPUT_JSON);
