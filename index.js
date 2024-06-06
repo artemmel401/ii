@@ -1,82 +1,69 @@
-async function changeFormat(obj)
-{
-    let newArray = [];
-    for (let variant of obj.variants)
-    {
-        let newTasks = [];
-        for (let task of variant.tasks)
-        {
-            let newAnswers = [];
-            for (let answer of task.answers)
-            {
-                newAnswers.push({...answer, id: Math.floor(Math.random()*10000)});
-            }
-            newTasks.push({...task, answers: newAnswers});
-        }
-        newArray.push({...variant, id: Math.floor(Math.random()*10000), tasks: newTasks});
+function changeFormat(obj) {
+  let newArray = [];
+  for (let variant of obj.variants) {
+    let newAnswers = []
+    for (let answer of variant.tasks[0].answers) {
+      newAnswers.push({ ...answer, id: Math.floor(Math.random() * 10000) });
     }
-
-    return {
-        variants: newArray
-    };
+    let newTasks = []
+    newTasks.push({...variant.tasks[0], id: Math.floor(Math.random() * 10000), answers: newAnswers})
+    newArray.push({ ...variant, id: Math.floor(Math.random() * 10000), tasks: newTasks, title: '' });
+  }
+  return {
+    variants: newArray
+  }
 }
+async function checkValidation(obj, count) {
+  const Ajv = require('ajv')
+  const ajv = new Ajv()
 
-async function checkValidation(obj)
-{
-    const Ajv = require('ajv')
-    const ajv = new Ajv()
-
-    const schema = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
-        "properties": {
-            "variants": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": { "type": "string" },
-                        "tasks": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": { "type": "string" },
-                                    "type": { "type": "string", "enum": ["text", "radio", "checkbox"] },
-                                    "content": { "type": "string" },
-                                    "answers": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": { "type": "string" },
-                                                "content": { "type": "string" },
-                                                "correct": { "type": "boolean" }
-                                            },
-                                            "required": ["id", "content", "correct"]
-                                        }
-                                    }
-                                },
-                                "required": ["id", "type", "content", "answers"]
-                            }
-                        }
-                    },
-                    "required": ["id", "tasks"]
-                }
+  const schema = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "variants": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "number" },
+            "tasks": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "number" },
+                  "type": { "type": "string", "enum": ["text", "radio", "checkbox"] },
+                  "content": { "type": "string" },
+                  "answers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "number" },
+                        "content": { "type": "string" },
+                        "correct": { "type": "boolean" }
+                      },
+                      "required": ["id", "content", "correct"]
+                    }
+                  }
+                },
+                "required": ["id", "type", "content", "answers"]
+              }
             }
-        },
-        "required": ["variants"]
-    };
+          },
+          "required": ["id", "tasks"]
+        }
+      }
+    },
+    "required": ["variants"]
+  };
 
-    const validate = ajv.compile(schema);
-    return validate(obj);
+  const validate = ajv.compile(schema);
+  return validate(obj);
 }
-
-/**
- *
- * @param {Object} req {topic: String, count: String }
- * @returns {Promise<{variants: []}>}
- */
 async function generateTest(req)
 {
     const jsonlint = require('jsonlint');
@@ -92,8 +79,8 @@ async function generateTest(req)
 
     const prompt = `Выведи json файл по запросу тест по теме ${req["topic"]} 
     количество вопросов ${req["count"]} в формате: массив вопросов 
-    называется variants, каждый вопрос объект с id имассивом tasks, который включает 
-    объект с строкой id, типом type (text - только один вариант ответа и он правильный, 
+    называется variants, каждый вопрос объект с id и массивом tasks, который включает 
+    один объект с строкой id, типом type (text - только один вариант ответа и он правильный, 
         radio - один правильный вариант ответа, checkbox - несколько правильных вариантов ответа), 
         названием вопроса content и массивом с вариантами ответа answers, каждый ответ это объект
          с id ответа, текстом ответа content, ключом correct, который принимает значение true, 
@@ -128,11 +115,11 @@ async function generateTest(req)
     try
     {
         let obj = jsonlint.parse(match[1]);
-        let variants = await changeFormat(obj);
+        let variants = changeFormat(obj);
 
         if (await checkValidation(variants))
         {
-            return variants;
+          return variants;
         }
         else
         {
@@ -146,12 +133,6 @@ async function generateTest(req)
         return null;
     }
 }
-
-/**
- *
- * @param {Object} req {topic: String}
- * @returns {Promise<{variants: []}>}
- */
 async function regenerateTest(req)
 {
     req["count"] = "1";
